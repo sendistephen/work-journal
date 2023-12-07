@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import type { ActionFunctionArgs } from '@remix-run/node';
-import { redirect } from '@remix-run/node';
-import { Form, useFetcher } from '@remix-run/react';
+import { useFetcher, useLoaderData } from '@remix-run/react';
+import { format, parseISO, startOfWeek } from 'date-fns';
+import { useEffect, useRef } from 'react';
 
 export async function action({ request }: ActionFunctionArgs) {
   const db = new PrismaClient();
@@ -17,25 +18,80 @@ export async function action({ request }: ActionFunctionArgs) {
     throw new Error('Bad request');
   }
 
-  await db.entry.create({
+  return await db.entry.create({
     data: {
       date: new Date(date),
       category,
       text,
     },
   });
-  return redirect('/');
+}
+
+export async function loader() {
+  const db = new PrismaClient();
+  const entries = await db.entry.findMany();
+  return entries.map((entry) => ({
+    ...entry,
+    date: entry.date.toISOString().substring(0, 10),
+  }));
 }
 
 export default function Index() {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fetcher = useFetcher();
+  const entries = useLoaderData<typeof loader>();
+  console.log(entries);
+
+  // const example = {
+  //   '2023/12/23': ['entry1,entry2,entry3'],
+  //   '2023/12/13': ['entry1,entry2,entry3'],
+  //   '2023/12/03': ['entry1,entry2,entry3'],
+  // };
+
+  const entriesByWeek = entries.reduce<Record<string, typeof entries>>(
+    (memo, entry) => {
+      const sunday = startOfWeek(parseISO(entry.date));
+      const sundayString = format(sunday, 'yyy-MM-dd');
+
+      memo[sundayString] ||= [];
+      memo[sundayString].push(entry);
+
+      return memo;
+    },
+    {}
+  );
+
+  const weeks = Object.keys(entriesByWeek)
+    .sort((a, b) => a.localeCompare(b))
+    .map((dateString) => ({
+      dateString,
+      work: entriesByWeek[dateString].filter(
+        (entry) => entry.category === 'work'
+      ),
+      learnings: entriesByWeek[dateString].filter(
+        (entry) => entry.category === 'learning'
+      ),
+      interestingThing: entriesByWeek[dateString].filter(
+        (entry) => entry.category === 'interesting-thing'
+      ),
+    }));
+
+  console.log(weeks);
+
+  useEffect(() => {
+    if (fetcher.state === 'idle' && textareaRef.current) {
+      textareaRef.current.value = '';
+      textareaRef.current?.focus();
+    }
+  }, [fetcher.state]);
+
   return (
-    <div className='p-10'>
+    <div className='p-10 max-w-2xl mx-auto'>
       <h1 className='text-5xl'>Work Journal</h1>
       <p className='mt-2 text-lg text-gray-400'>
         Learning and doings. updated weekely.
       </p>
-      <div className='my-8 border p-2'>
+      <div className='my-8 border border-gray-700 rounded-lg p-4'>
         <p className='italic'>Create an entry</p>
         <fetcher.Form method='post'>
           <fieldset
@@ -49,6 +105,7 @@ export default function Index() {
                   type='date'
                   name='date'
                   className='text-gray-700'
+                  defaultValue={format(new Date(), 'yyyy-MM-dd')}
                 />
               </div>
               <label>
@@ -58,6 +115,7 @@ export default function Index() {
                   type='radio'
                   name='category'
                   value='work'
+                  defaultChecked
                 />
                 Work
               </label>
@@ -82,6 +140,7 @@ export default function Index() {
             </div>
             <div className='mt-6'>
               <textarea
+                ref={textareaRef}
                 required
                 name='text'
                 placeholder='Write your entry...'
@@ -100,32 +159,54 @@ export default function Index() {
           </fieldset>
         </fetcher.Form>
       </div>
-      <div className='mt-3 space-y-4'>
-        <div>
-          <p className='font-bold'>Work</p>
-          <ul className='ml-8 list-disc'>
-            <li>First item</li>
-            <li>First item</li>
-            <li>First item</li>
-          </ul>
+      {weeks.map((week) => (
+        <div key={week.dateString} className='mt-6'>
+          <div>
+            <p className='font-bold'>
+              Week of {format(parseISO(week.dateString), 'MMMM do')}
+            </p>
+            <div className='mt-3 space-y-4'>
+              {week.work.length > 0 && (
+                <div>
+                  <p className='font-bold border-l-4 border-green-700 text-green-700'>Work</p>
+
+                  <ul className='ml-8 list-disc'>
+                    {week.work.map((entry) => (
+                      <li key={entry.id}>{entry.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {week.learnings.length > 0 && (
+                <div>
+                  <p className='font-bold border-l-4 border-sky-700 text-sky-700'>
+                    Learnings
+                  </p>
+
+                  <ul className='ml-8 list-disc'>
+                    {week.learnings.map((entry) => (
+                      <li key={entry.id}>{entry.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {week.interestingThing.length > 0 && (
+                <div>
+                  <p className='font-bold border-l-4 border-pink-700 text-pink-700'>
+                    Interesting Thing
+                  </p>
+
+                  <ul className='ml-8 list-disc'>
+                    {week.interestingThing.map((entry) => (
+                      <li key={entry.id}>{entry.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <div>
-          <p className='font-bold'>Learning</p>
-          <ul className='ml-8 list-disc'>
-            <li>First item</li>
-            <li>First item</li>
-            <li>First item</li>
-          </ul>
-        </div>
-        <div>
-          <p className='font-bold'>Interesting things</p>
-          <ul className='ml-8 list-disc'>
-            <li>First item</li>
-            <li>First item</li>
-            <li>First item</li>
-          </ul>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
