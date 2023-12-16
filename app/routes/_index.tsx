@@ -38,8 +38,6 @@ export async function loader() {
 }
 
 export default function Index() {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fetcher = useFetcher();
   const entries = useLoaderData<typeof loader>();
 
   const entriesByWeek = entries.reduce<Record<string, typeof entries>>(
@@ -69,13 +67,6 @@ export default function Index() {
         (entry) => entry.category === 'interesting-thing'
       ),
     }));
-
-  useEffect(() => {
-    if (fetcher.state === 'idle' && textareaRef.current) {
-      textareaRef.current.value = '';
-      textareaRef.current?.focus();
-    }
-  }, [fetcher.state]);
 
   return (
     <div>

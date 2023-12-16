@@ -4,7 +4,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from '@remix-run/node';
-import { useLoaderData } from '@remix-run/react';
+import { Form, useLoaderData } from '@remix-run/react';
 import EntryForm from '~/components/entry-form';
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -12,8 +12,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
   let formData = await request.formData();
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  const { date, category, text } = Object.fromEntries(formData);
-  if (
+  const { _action, date, category, text } = Object.fromEntries(formData);
+
+  if (_action === 'delete') {
+    await db.entry.delete({
+      where: { id: +params.entryId },
+    });
+    return redirect('/');
+  } else if (
     typeof date !== 'string' ||
     typeof category !== 'string' ||
     typeof text !== 'string'
@@ -55,10 +61,26 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
 export default function EditPage() {
   const entry = useLoaderData<typeof loader>();
 
+  function handleSubmit(e: React.FormEvent<HTMLButtonElement>) {
+    e.preventDefault();
+  }
+
   return (
     <div className='mt-4'>
       <p>Editing entry {entry.id}</p>
       <EntryForm entry={entry} />
+      <div className='mt-8'>
+        <Form method='post'>
+          <button
+            onSubmit={(e) => handleSubmit}
+            name='_action'
+            value='delete'
+            className='text-red-500 hover:text-red-700'
+          >
+            Delete this entry...
+          </button>
+        </Form>
+      </div>
     </div>
   );
 }
